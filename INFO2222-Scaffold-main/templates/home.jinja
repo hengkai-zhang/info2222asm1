@@ -1,0 +1,185 @@
+{% extends 'base.jinja' %}
+
+{% block content %}
+<style>
+    nav {
+        border-bottom: 1px solid black;
+        overflow: auto;
+    }
+    #message_box {
+        border: 1px solid black;
+        height: 400px;
+        width: 800px;
+        overflow: auto;
+        padding: 2px;
+    }
+    #friendlist_box{
+        border: 1px solid black;
+        height: 400px;
+        width: 800px;
+        overflow: auto;
+        padding: 2px;
+    }
+    #friendreqlist_box{
+        border: 1px solid black;
+        height: 400px;
+        width: 800px;
+        overflow: auto;
+        padding: 2px;
+    }
+    .text {
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }
+</style>
+
+<!-- Navbar, you'll see the username here -->
+<nav style="border-bottom: 1px solid black;">
+    <ol style="float: right">
+        <li style="display:inline-block">Username: {{ username }}</li>
+    </ol>
+</nav>
+
+<h1>Messaging App</h1>
+
+<main>
+    <!-- The friend list is displayed here -->
+    <section id="friendlist_box">
+        <p class="text">Friend list box: </p>
+        <ul>
+            {% for item in friend_list %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <!-- Section for managing friend requests -->
+    <section id="friendreq_box">
+        <p class="text">Friend request box:</p>
+        <p class="text">Send friend request to user:</p>
+        <input id="friendreq_receiver" placeholder="username">
+        <button onclick="send_friend_req()">Add friend</button>
+
+        <p class="text">Accept friend request from:</p>
+        <input id="acceptfriendreq_receiver" placeholder="username">
+        <button onclick="send_accept_friend_req()">Accept friend request</button>
+
+        <p class="text">Reject friend request from:</p>
+        <input id="rejectfriendreq_receiver" placeholder="username">
+        <button onclick="send_reject_friend_req()">Reject friend request</button>
+    </section>
+
+    <!-- Section for listing friend requests -->
+    <section id="friendreqlist_box">
+        <p class="text">Friend request list box:</p>
+        <ul>
+            {% for item in friend_req_list %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <!-- The messages are displayed here -->
+    <section id="message_box"></section>
+
+    <!-- Chat box initially displayed for entering receiver username -->
+    <section id="chat_box">
+        <p class="text">Chat with:</p>
+        <input id="receiver" placeholder="username">
+        <button onclick="join_room()">Chat</button>
+    </section>
+
+    <!-- The message input box, hidden initially -->
+    <section id="input_box" style="display: none;">
+        <p class="text">Message:</p>
+        <input id="message" placeholder="message">
+        <button onclick="send()">Send</button>
+        <button onclick="leave()">Leave Room</button>
+    </section>
+</main>
+
+<script src="/static/js/libs/socket.io.min.js"></script>
+<script>
+    let room_id = 0;
+
+    $("#message").on("keyup", function(e) {
+        if (e.key == "Enter") {
+            send();
+        }
+    });
+
+    $("#receiver").on("keyup", function(e) {
+        if (e.key == "Enter") {
+            join_room();
+        }
+    });
+
+    $(document).ready(function() {
+        if (Cookies.get("room_id") === undefined) {
+            return;
+        }
+
+        $("#chat_box").hide();
+        $("#input_box").show();
+        room_id = parseInt(Cookies.get("room_id"));
+    });
+
+    let username = "{{ username }}";
+    Cookies.set('username', username);
+    const socket = io();
+
+    socket.on("incoming", function(msg, color="black") {
+        add_message(msg, color);
+    });
+
+    function send() {
+        let message = $("#message").val();
+        $("#message").val("");
+        socket.emit("send", username, message, room_id);
+    }
+
+    function join_room() {
+        let receiver = $("#receiver").val();
+        socket.emit("join", username, receiver, function(res) {
+            if (typeof res !== "number") {
+                alert(res);
+                return;
+            }
+            room_id = res;
+            Cookies.set("room_id", room_id);
+            $("#chat_box").hide();
+            $("#input_box").show();
+        });
+    }
+
+    function leave() {
+        Cookies.remove("room_id");
+        socket.emit("leave", username, room_id);
+        $("#input_box").hide();
+        $("#chat_box").show();
+    }
+
+    function add_message(message, color) {
+        let box = $("#message_box");
+        let child = $("<p style='color:" + color + "; margin: 0px;'></p>").text(message);
+        box.append(child);
+    }
+
+    function send_friend_req() {
+        let requsername = $("#friendreq_receiver").val();
+        $("#friendreq_receiver").val("");
+        socket.emit("requestfriend", username, requsername, function(res) {
+            alert(res);
+            window.navigate(location);
+        });
+    }
+
+    function send_accept_friend_req() {
+        let requsername = $("#acceptfriendreq_receiver").val();
+        $("#acceptfriendreq_receiver").val("");
+        socket.emit("acceptfriend", username, requsername, function(res) {
+            alert(res);
+        });
+    }
+</script>
+{% endblock %}
