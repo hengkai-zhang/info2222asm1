@@ -59,24 +59,18 @@ class ChatRoom(Base):
     participant_username = Column(String(50), nullable=False)  # This might need adjustments based on your design
 
 
-def get_room(creator_name: str, recver_name: str):
+def get_room(creator: str, receiver: str):
+    """Retrieve a room ID based on the creator and receiver."""
     with Session(engine) as session:
-        # Query for a room where creator_name is the creator and recver_name is the participant
-        room1 = session.query(RoomDB).filter_by(creator_username=creator_name, participant_username=recver_name).first()
+        room = session.query(ChatRoom).filter(
+            ((ChatRoom.creator_username == creator) & (ChatRoom.participant_username == receiver)) |
+            ((ChatRoom.creator_username == receiver) & (ChatRoom.participant_username == creator))
+        ).first()
 
-        # If a room is found, return its ID
-        if room1 is not None:
-            return room1.id
+        if room:
+            return room.id
+        return None  # Return None if no room found
 
-        # If not found, query for the opposite combination
-        room2 = session.query(RoomDB).filter_by(creator_username=recver_name, participant_username=creator_name).first()
-
-        # If a second room is found, return its ID
-        if room2 is not None:
-            return room2.id
-
-        # If no room is found, return None to indicate absence of such a room
-        return None
 
 
 def get_room_by_id(room_id: int):
@@ -84,17 +78,26 @@ def get_room_by_id(room_id: int):
     with Session(engine) as session:
         room = session.query(RoomDB).filter_by(id=room_id).first()
         return room
-def save_room(creater: str, recver: str):
-    """Save a room to the database, avoiding duplicates."""
+def save_room(creator: str, receiver: str):
+    """Save a room to the database, ensuring no duplicates exist."""
     with Session(engine) as session:
-        if creater and recver:
-            # Check for existing room to avoid duplicates
-            if get_room(creater, recver) == -1:
-                room = RoomDB(creator_username=creater, participant_username=recver, name="room")
-                session.add(room)
-                session.commit()
-                return True
-        return False
+        # Check if room already exists to avoid duplicates
+        existing_room = session.query(ChatRoom).filter(
+            ((ChatRoom.creator_username == creator) & (ChatRoom.participant_username == receiver)) |
+            ((ChatRoom.creator_username == receiver) & (ChatRoom.participant_username == creator))
+        ).first()
+
+        if existing_room:
+            print("Room already exists.")
+            return existing_room.id  # Return existing room ID if found
+
+        # If no room exists, create a new one
+        new_room = ChatRoom(creator_username=creator, participant_username=receiver, name=f"{creator}_{receiver}")
+        session.add(new_room)
+        session.commit()
+        print(f"New room created with ID: {new_room.id}")
+        return new_room.id
+
 
 
 class RoomDB(Base):

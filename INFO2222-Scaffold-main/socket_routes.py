@@ -56,14 +56,31 @@ def send(username, message, room_id):
     if db_room_id is None:
         print("room does not exist")
         db.save_room(username,receiver)
-    print(f"db_room_id1:{db_room_id}, username:{username},receiver:{receiver}")
+    print(f"db_room_id1:{db_room_id}, username:{username},receiver:{receiver},message:{message}")
     db_room_id = db.get_room(username,receiver)
     if db_room_id is None:
 
         print("room does not exist again")
         return
     print(f"db_room_id2:{db_room_id}, username:{username},receiver:{receiver}")
-    print(f"send result = {db.save_message(db_room_id,username,receiver,message)}")
+    print(f"send result = {db.save_message(db_room_id,username,receiver,message)},message:{message}")
+
+# @socketio.on("send")
+# def send(username, message, receiver):
+#     print("Attempting to send message...")
+#     room_id = db.get_room(username, receiver)  # Get the existing room ID or create a new one
+#
+#     if room_id is None:
+#         room_id = db.save_room(username, receiver)  # Create room if it doesn't exist
+#
+#     if room_id is not None:
+#         if db.save_message(room_id, username, message):
+#             print("Message saved successfully.")
+#             emit("incoming", {"sender": username, "message": message}, to=room_id)
+#         else:
+#             print("Failed to save message.")
+#     else:
+#         print("Failed to retrieve or create room.")
 
 
 
