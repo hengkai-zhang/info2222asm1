@@ -1,162 +1,135 @@
-'''
-db
-database file, containing all the logic to interface with the sql database
-'''
-
 import sqlalchemy as db
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from models import *
-
+from models import User, Friend, FriendRequest, ChatRecord, ChatRoom, Base
+from sqlalchemy import create_engine
 from pathlib import Path
 
-# creates the database directory
-Path("database") \
-    .mkdir(exist_ok=True)
+# Establish the database connection
+engine = create_engine('sqlite:///database/main.db', echo=True)
+Base.metadata.create_all(engine)  # Ensure all tables are created based on models
 
-# "database/main.db" specifies the database file
-# change it if you wish
-# turn echo = True to display the sql output
-engine = create_engine("sqlite:///database/main.db", echo=False)
-
-# initializes the database
-Base.metadata.create_all(engine)
-
-# inserts a user to the database
-def insert_user(username: str, password: str):
+def get_user(username):
+    """Retrieve a user from the database by username."""
     with Session(engine) as session:
-        user = User(username=username, password=password)
-        session.add(user)
-        session.commit()
+        return session.query(User).filter_by(username=username).first()
 
-# gets a user from the database
-def get_user(username: str):
+def insert_user(username, password):
+    """Insert a new user into the database."""
     with Session(engine) as session:
-        return session.get(User, username)
+        if not get_user(username):
+            user = User(username=username, password=password)
+            session.add(user)
+            session.commit()
+            return True
+        return False
 
-#add friend
-def save_friend(user1: str, user2: str):
-
+def save_friend(user1, user2):
+    """Create a friend connection between two users."""
     with Session(engine) as session:
-        # Create two Friend objects to represent the bidirectional friendship
-        friend1 = Friend(user_username1=user1, user_username2=user2)
-        friend2 = Friend(user_username1=user2, user_username2=user1)
+        if not session.query(Friend).filter_by(user_username1=user1, user_username2=user2).first():
+            friend1 = Friend(user_username1=user1, user_username2=user2)
+            friend2 = Friend(user_username1=user2, user_username2=user1)
+            session.add_all([friend1, friend2])
+            session.commit()
+            return True
+        return False
 
-        session.add(friend1)
-        session.add(friend2)
-        session.commit()
-
-#add_friend(username: str,friendname: str):
-def get_friend(user: str, user2: str):
-
+def get_friend(user1, user2):
+    """Check if two users are friends."""
     with Session(engine) as session:
-        # Try to find the friendship where user is user_username1 and user2 is user_username2
-        friend = session.query(Friend).filter_by(user_username1=user, user_username2=user2).first()
-        if friend:
-            return friend
+        return session.query(Friend).filter_by(user_username1=user1, user_username2=user2).first()
 
-        # Try to find the friendship where user is user_username2 and user2 is user_username1
-        friend = session.query(Friend).filter_by(user_username2=user, user_username1=user2).first()
-        return friend
-
-
-def get_friendlist(username: str):
+def save_friendrequest(sender, receiver):
+    """Save a new friend request."""
     with Session(engine) as session:
-        if username:
-            user = session.query(User).filter_by(username=username).first()  # Get the User object by username
-            friends = session.query(Friend).filter_by(user_username1=user.username).all()
-            friend_usernames = [friend.user_username2 for friend in friends]
-            return friend_usernames
-        return []
-
-
-#insert friend
-
-
-#insert friend list:
-def get_friendrequestlist(user: str):
-
-
-
-    with Session(engine) as session:
-        if user:
-            requests = session.query(FriendRequest).filter_by(receiver_username=user).all()
-            request_details = [f"{request.sender_username}, status: {request.status}" for request in requests]
-            return request_details
-        return []
-
-
-def get_friendrequest(sender: str, receiver: str):
-    with Session(engine) as session:
-        if sender and receiver:
-            friend_request = session.query(FriendRequest).filter_by(
-                sender_username=sender,
-                receiver_username=receiver
-            ).first()
-            return friend_request
-    return None
-
-
-def save_friendrequest(sender: str, receiver: str):
-
-    if sender and receiver:
-        with Session(engine) as session:
+        if not session.query(FriendRequest).filter_by(sender_username=sender, receiver_username=receiver).first():
             friend_request = FriendRequest(sender_username=sender, receiver_username=receiver)
             session.add(friend_request)
             session.commit()
             return True
-    return False
-def update_friendrequest(sender: str, receiver: str,status: str):
-    with Session(engine) as session:
-        friend_request = session.query(FriendRequest).filter_by(
-            sender_username=sender,
-            receiver_username=receiver
-        ).first()
+        return False
 
+def get_friendrequest(sender, receiver):
+    """Retrieve a friend request from one user to another."""
+    with Session(engine) as session:
+        return session.query(FriendRequest).filter_by(sender_username=sender, receiver_username=receiver).first()
+
+def update_friendrequest(sender, receiver, status):
+    """Update the status of a friend request."""
+    with Session(engine) as session:
+        friend_request = get_friendrequest(sender, receiver)
         if friend_request:
             friend_request.status = status
             session.commit()
             return True
         return False
 
-def save_message(roomid:int,sender: str, receiver: str, message: str):
+
+def get_friendrequestlist(user: str):
+    """
+    Retrieves a list of friend requests where the given user is the receiver.
+
+    Parameters:
+        user (User): The user who has received the friend requests.
+
+    Returns:
+        list[str]: A list of strings with sender username and request status, or an empty list if no user.
+    """
+    if not user:
+        return []
+
     with Session(engine) as session:
-        if sender and receiver:
-            chat_msg = ChatRecord(chatroom_id=roomid,sender_username=sender,receiver_username=receiver,message=message)
-            session.add(chat_msg)
-            print(f'added {chat_msg}')
+        requests = session.query(FriendRequest).filter_by(receiver_username=user).all()
+        request_details = [f"{request.sender_username}, status: {request.status}" for request in requests]
+        return request_details
+def get_friendlist(username):
+    """ Retrieve the friend list for a user """
+    with Session(engine) as session:
+        user = session.query(User).filter_by(username=username).first()
+        if user:
+            friends = session.query(Friend).filter((Friend.user_username1 == username) | (Friend.user_username2 == username)).all()
+            friend_usernames = []
+            for friend in friends:
+                if friend.user_username1 == username:
+                    friend_usernames.append(friend.user_username2)
+                else:
+                    friend_usernames.append(friend.user_username1)
+            return friend_usernames
+        return []
+
+
+def get_room(sender, receiver):
+    """Retrieve or create a room for communication between two users."""
+    with Session(engine) as session:
+        room = session.query(ChatRoom).filter(
+            ((ChatRoom.creator_username == sender) & (ChatRoom.participant_username == receiver)) |
+            ((ChatRoom.creator_username == receiver) & (ChatRoom.participant_username == sender))
+        ).first()
+        return room.id if room else None
+
+def save_room(sender, receiver):
+    """Save a new chat room if it does not exist."""
+    with Session(engine) as session:
+        room_id = get_room(sender, receiver)
+        if not room_id:
+            new_room = ChatRoom(creator_username=sender, participant_username=receiver)
+            session.add(new_room)
             session.commit()
-            return True
-        return False
-def get_messagelist(sender:str, receiver: str):
+            return new_room.id
+        return room_id
+
+def save_message(room_id, sender, receiver, message):
+    """Save a message sent from one user to another in a chat room."""
     with Session(engine) as session:
-        if sender and receiver:
-            db_room_id = get_room(sender, receiver)
-            if -1 == db_room_id:
-                return []
-            chat_records = session.query(ChatRecord).filter_by(chatroom_id=db_room_id).all()
-            msg_content = [{"sender":msg.sender_username,"content":msg.message} for msg in chat_records]
-            return msg_content
-if __name__ == '__main__':
+        new_message = ChatRecord(chatroom_id=room_id, sender_username=sender, receiver_username=receiver, message=message)
+        session.add(new_message)
+        session.commit()
 
+def get_messagelist(room_id):
+    """Retrieve all messages from a chat room."""
+    with Session(engine) as session:
+        messages = session.query(ChatRecord).filter_by(chatroom_id=room_id).all()
+        return [{"sender": m.sender_username, "message": m.message} for m in messages]
 
-
-    # Assuming you have already configured your database URL
-    engine = create_engine('sqlite:///database/main.db')  # Adjust for your actual database URL
-
-
-    def check_friend_requests_for_kai():
-        with Session(engine) as session:
-            # Query FriendRequest for 'kai'
-            requests = session.query(FriendRequest).filter_by(receiver_username='hank').all()
-            if not requests:
-                print("No friend requests found for hank.")
-            else:
-                for request in requests:
-                    print(
-                        f"Friend request from {request.sender_username} to {request.receiver_username} with status {request.status}")
-
-
-    # Call the function
-    check_friend_requests_for_kai()
-
+# Create the database directory if it doesn't exist
+Path("database").mkdir(exist_ok=True)
