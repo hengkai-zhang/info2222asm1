@@ -2,56 +2,116 @@
 
 {% block content %}
 <style>
+    body {
+        font-family: 'Arial', sans-serif;
+        background-color: #00c3e3; /* Nintendo blue! */
+        color: #333;
+    }
     nav {
-        border-bottom: 1px solid black;
+        background-color: #E60012; /* Nintendo red */
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    #lists-container {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 20px;
+    }
+    .list-box {
+        background-color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        height: 400px;
+        width: 45%;
         overflow: auto;
+        padding: 10px;
+        margin: 5px;
+    }
+    #message_box, #friendreq_box {
+        background-color: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 10px;
+        margin-top: 20px;
     }
     #message_box {
-        border: 1px solid black;
         height: 400px;
-        width: 800px;
         overflow: auto;
-        padding: 2px;
     }
-    #friendlist_box{
-        border: 1px solid black;
-        height: 400px;
-        width: 800px;
-        overflow: auto;
-        padding: 2px;
+    ul {
+        padding-left: 20px;
     }
-    #friendreqlist_box{
-        border: 1px solid black;
-        height: 400px;
-        width: 800px;
-        overflow: auto;
-        padding: 2px;
+    li {
+        padding: 5px 0;
     }
     .text {
-        margin-top: 2px;
-        margin-bottom: 2px;
+        margin-top: 5px;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    input, button {
+        padding: 10px;
+        margin: 5px;
+        border-radius: 5px;
+        border: none;
+    }
+    button {
+        background-color: #32cd32; /* Lime Green */
+        color: white;
+        cursor: pointer;
+    }
+    button:hover {
+        background-color: #228b22; /* Forest Green */
+    }
+    ol {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        float: right;
+    }
+    ol li {
+        display: inline-block;
+        background-color: #0057B8; /* Nintendo blue */
+        padding: 5px 10px;
+        border-radius: 5px;
     }
 </style>
 
 <!-- Navbar, you'll see the username here -->
-<nav style="border-bottom: 1px solid black;">
-    <ol style="float: right">
-        <li style="display:inline-block">Username: {{ username }}</li>
+<nav>
+    <ol>
+        <li>Username: {{ username }}</li>
     </ol>
 </nav>
 
-<h1>Messaging App</h1>
+<h1 style="text-align: center; color: #333;">Messaging App</h1>
 
 <main>
-    <!-- The friend list is displayed here -->
-    <section id="friendlist_box">
-        <p class="text">Friend list box: </p>
-        <ul>
-            {% for item in friend_list %}
-            <li>{{ item }}</li>
-            {% endfor %}
-        </ul>
-    </section>
+    <!-- Container for lists with flex display -->
+    <div id="lists-container">
+        <!-- The friend list is displayed here -->
+        <section class="list-box" id="friendlist_box">
+            <p class="text">Friend list:</p>
+            <ul>
+                {% for item in friend_list %}
+                <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <!-- Section for listing friend requests -->
+        <section class="list-box" id="friendreqlist_box">
+            <p class="text">Friend request list:</p>
+            <ul>
+                {% for item in friend_req_list %}
+                <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
 
     <!-- Section for managing friend requests -->
     <section id="friendreq_box">
@@ -69,18 +129,10 @@
         <button onclick="send_reject_friend_req()">Reject friend request</button>
     </section>
 
-    <!-- Section for listing friend requests -->
-    <section id="friendreqlist_box">
-        <p class="text">Friend request list box:</p>
-        <ul>
-            {% for item in friend_req_list %}
-            <li>{{ item }}</li>
-            {% endfor %}
-        </ul>
-    </section>
-
     <!-- The messages are displayed here -->
-    <section id="message_box"></section>
+    <section id="message_box">
+        <!-- Messages will be dynamically added here -->
+    </section>
 
     <!-- Chat box initially displayed for entering receiver username -->
     <section id="chat_box">
@@ -103,25 +155,23 @@
     let room_id = 0;
 
     $("#message").on("keyup", function(e) {
-        if (e.key == "Enter") {
+        if (e.key === "Enter") {
             send();
         }
     });
 
     $("#receiver").on("keyup", function(e) {
-        if (e.key == "Enter") {
+        if (e.key === "Enter") {
             join_room();
         }
     });
 
     $(document).ready(function() {
-        if (Cookies.get("room_id") === undefined) {
-            return;
+        if (Cookies.get("room_id") !== undefined) {
+            $("#chat_box").hide();
+            $("#input_box").show();
+            room_id = parseInt(Cookies.get("room_id"));
         }
-
-        $("#chat_box").hide();
-        $("#input_box").show();
-        room_id = parseInt(Cookies.get("room_id"));
     });
 
     let username = "{{ username }}";
@@ -156,7 +206,7 @@
         Cookies.remove("room_id");
         socket.emit("leave", username, room_id);
         $("#input_box").hide();
-        $("#chat_box").show();
+        $("#chat_box"). show();
     }
 
     function add_message(message, color) {

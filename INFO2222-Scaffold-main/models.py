@@ -1,103 +1,56 @@
-'''
-models
-defines sql alchemy data models
-also contains the definition for the room class used to keep track of socket.io rooms
-
-Just a sidenote, using SQLAlchemy is a pain. If you want to go above and beyond, 
-do this whole project in Node.js + Express and use Prisma instead, 
-Prisma docs also looks so much better in comparison
-
-or use SQLite, if you're not into fancy ORMs (but be mindful of Injection attacks :) )
-'''
-
-from sqlalchemy import String, Column, Integer, TIMESTAMP, ForeignKey, UniqueConstraint, create_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
+from sqlalchemy import String, Column, Integer, ForeignKey, UniqueConstraint, create_engine
+from sqlalchemy.orm import DeclarativeBase, Session
 from typing import Dict
+from pathlib import Path
+import os
 
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from base64 import urlsafe_b64encode
+
+import db
 
 engine = create_engine("sqlite:///database/main.db", echo=False)
+Path("database").mkdir(exist_ok=True)
 
-# data models
+
 class Base(DeclarativeBase):
     pass
 
-# model to store user information
 
 class User(Base):
     __tablename__ = 'tUsers'
     username = Column(String(50), primary_key=True)
     password = Column(String(255), nullable=False)
-    # Relationships can be added here if necessary
+    key = Column(String, nullable=False)
+
+
 
 class Friend(Base):
-    __tablename__ = 'Friends'
+    __tablename__ = 'tFriends'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_username1 = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
     user_username2 = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
     __table_args__ = (UniqueConstraint('user_username1', 'user_username2', name='_user_pair_uc'),)
 
+
 class FriendRequest(Base):
-    __tablename__ = 'FriendRequests'
+    __tablename__ = 'tFriendRequests'
     id = Column(Integer, primary_key=True, autoincrement=True)
     sender_username = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
     receiver_username = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
     status = Column(String, nullable=False, default='pending')
 
+
 class ChatRecord(Base):
-    __tablename__ = 'ChatRecords'
+    __tablename__ = 'tChatRecords'
     id = Column(Integer, primary_key=True, autoincrement=True)
     chatroom_id = Column(Integer, nullable=False)
     sender_username = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
     receiver_username = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
     message = Column(String, nullable=False)
-
-class ChatRoom(Base):
-    __tablename__ = 'ChatRoom'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(255), nullable=False)
-    creator_username = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
-    participant_username = Column(String(50), nullable=False)  # This might need adjustments based on your design
-
-
-def get_room(creator: str, receiver: str):
-    """Retrieve a room ID based on the creator and receiver."""
-    with Session(engine) as session:
-        room = session.query(ChatRoom).filter(
-            ((ChatRoom.creator_username == creator) & (ChatRoom.participant_username == receiver)) |
-            ((ChatRoom.creator_username == receiver) & (ChatRoom.participant_username == creator))
-        ).first()
-
-        if room:
-            return room.id
-        return None  # Return None if no room found
-
-
-
-def get_room_by_id(room_id: int):
-    """Retrieve a room by its ID."""
-    with Session(engine) as session:
-        room = session.query(RoomDB).filter_by(id=room_id).first()
-        return room
-def save_room(creator: str, receiver: str):
-    """Save a room to the database, ensuring no duplicates exist."""
-    with Session(engine) as session:
-        # Check if room already exists to avoid duplicates
-        existing_room = session.query(ChatRoom).filter(
-            ((ChatRoom.creator_username == creator) & (ChatRoom.participant_username == receiver)) |
-            ((ChatRoom.creator_username == receiver) & (ChatRoom.participant_username == creator))
-        ).first()
-
-        if existing_room:
-            print("Room already exists.")
-            return existing_room.id  # Return existing room ID if found
-
-        # If no room exists, create a new one
-        new_room = ChatRoom(creator_username=creator, participant_username=receiver, name=f"{creator}_{receiver}")
-        session.add(new_room)
-        session.commit()
-        print(f"New room created with ID: {new_room.id}")
-        return new_room.id
-
+    key = Column(String, nullable=False)
 
 
 class RoomDB(Base):
@@ -108,76 +61,102 @@ class RoomDB(Base):
     participant_username = Column(String(50), ForeignKey('tUsers.username'), nullable=False)
 
 
+def get_room(creator: str, receiver: str):
+    with Session(engine) as session:
+        print(f"strat matching :creator :{creator} and receiver :{receiver}")
+        room = session.query(RoomDB).filter_by(creator_username=creator, participant_username=receiver).first()
+        rooms = session.query(RoomDB).all()
+        print("all the rooms are shown")
+        for r in rooms:
+            print(f"room_id:{r.id},participant_username:{r.participant_username},creator_username:{r.creator_username}")
+
+        if room is not None:
+            print(f"the first check with id {room.id}")
+            return room.id
+        room = session.query(RoomDB).filter_by(creator_username=receiver, participant_username=creator).first()
+        if room is not None:
+            print(f"the second check with id {room.id}")
+            return room.id
+        return None
+
+
+def get_room_receiver(room_id: int, username: str):
+    with Session(engine) as session:
+        room = session.query(RoomDB).filter_by(id=room_id).first()
+        print(f"in this room creator is {room.creator_username},{room.participant_username}")
+        if room.participant_username == username:
+            return room.creator_username
+        if room.creator_username == username:
+            return room.participant_username
+        return None
+
+
+def save_room(creator: str, receiver: str):
+    with Session(engine) as session:
+        existing_room = get_room(creator, receiver)
+        if existing_room is not None:
+            print(f"return exsisting room for {creator} and {receiver}")
+            return existing_room
+        if creator == receiver:
+            print(f"creator == receiver")
+            return None
+        new_room = RoomDB(creator_username=creator, participant_username=receiver, name="room")
+        session.add(new_room)
+        session.commit()
+        print(f"return new room for {creator} and {receiver}")
+        return new_room.id
+
+
 def save_message(roomid: int, sender: str, receiver: str, message: str):
     with Session(engine) as session:
-        if sender and receiver:
-            chat_message = ChatRecord(chatroom_id=roomid,sender_username=sender,receiver_username=receiver,message=message)
-            session.add(chat_message)
-            session.commit()
-            return True
-        return False
-def get_messagelist(sender: str ,receiver: str):
+        chat_message = ChatRecord(id=roomid, sender_username=sender, receiver_username=receiver,
+                                  message=message)
+        session.add(chat_message)
+        session.commit()
+        return True
+
+
+def get_messagelist(sender: str, receiver: str):
     with Session(engine) as session:
-        if sender and receiver:
-            room_id = get_room(sender, receiver)
-            if room_id == -1:
-                return []
-            chat_records = session.query(ChatRecord).filter_by(chatroom_id=room_id).al1()
-            messages_content = [{"sender":msg.sender_username,"content":msg.message} for msg in chat_records]
-            return messages_content
-        return []
-
-                
+        room_id = get_room(sender, receiver)
+        if room_id is None:
+            return []
+        chat_records = session.query(ChatRecord).filter_by(chatroom_id=room_id).all()
+        return [{"sender": msg.sender_username, "content": msg.message,"key": msg.key} for msg in chat_records]
 
 
-
-
-
-
-
-
-# stateful counter used to generate the room id
 class Counter():
     def __init__(self):
         self.counter = 0
-    
+
     def get(self):
         self.counter += 1
         return self.counter
 
-# Room class, used to keep track of which username is in which room
+
 class Room():
     def __init__(self):
         self.counter = Counter()
-        # dictionary that maps the username to the room id
-        # for example self.dict["John"] -> gives you the room id of 
-        # the room where John is in
         self.dict: Dict[str, int] = {}
 
-    def create_room(self, sender: str, receiver: str) -> int:
+    def create_room(self, sender: str, receiver: str):
         room_id = self.counter.get()
         self.dict[sender] = room_id
         self.dict[receiver] = room_id
         return room_id
-    def get_room_receiver(self,room_id: int,exclusion:str ):
-        print(self.dict)
-        for key,value in self.dict.items():
-            if value == room_id and value != exclusion:
-                return key
-        return None
 
-    
-    def join_room(self,  sender: str, room_id: int) -> int:
+
+    def join_room(self, sender: str, room_id: int):
         self.dict[sender] = room_id
 
-    def leave_room(self, user):
-        if user not in self.dict.keys():
-            return
-        del self.dict[user]
+    def leave_room(self, user: str):
+        self.dict.pop(user, None)
 
-    # gets the room id from a user
     def get_room_id(self, user: str):
-        if user not in self.dict.keys():
-            return None
-        return self.dict[user]
-    
+        return self.dict.get(user)
+
+
+if __name__ == "__main__":
+    with Session(engine) as session:
+        room = session.query(RoomDB).filter_by(creator_username="kai", participant_username="bob").first()
+        print(room.id)
