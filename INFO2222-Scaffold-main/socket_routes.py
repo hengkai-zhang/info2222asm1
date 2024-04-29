@@ -141,10 +141,13 @@ def handle_friendrequest(username, receiver):
 
     friend_request = db.get_friend_request(username, receiver)
     if friend_request is not None:
-        return "Friend request already sent."
+        return "Already sent friend request ."
 
     if username == receiver:
         return "you can not send friend request to yourself."
+    friend_request = db.get_friend_request(receiver, username)
+    if friend_request is not None:
+        return "the target user already sent you a friend request , please react."
 
     # 5. Save the friend request
     db.save_friend_request(username, receiver)
@@ -160,7 +163,7 @@ def handle_acceptfriend(username, receiver):
 
     friend = db.get_friend(receiver, username)
     if friend is not None:
-        return "You are already friends."
+        return "You and target user are already friends."
 
 
     target = db.get_user(receiver)

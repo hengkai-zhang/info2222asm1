@@ -85,7 +85,7 @@ def get_room_receiver(room_id: int, username: str):
         room = session.query(RoomDB).filter_by(id=room_id).first()
         print(f"in this room creator is {room.creator_username},{room.participant_username}")
         if room.participant_username == username:
-            return room.creator_username
+            return rooqm.creator_username
         if room.creator_username == username:
             return room.participant_username
         return None
